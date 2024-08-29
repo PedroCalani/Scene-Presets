@@ -6,6 +6,175 @@
  a single file. -->
 
   <toolshelf name="scene_presets" label="Scene Presets">
-    <memberTool name="Scene Presets"/>
+    <memberTool name="scene_presets"/>
   </toolshelf>
+
+  <tool name="scene_presets" label="Scene Presets" icon="SOP_file">
+    <script scriptType="python"><![CDATA[import os
+from PySide2 import QtWidgets
+
+# Folder with presets.
+folder_path = hou.getenv("HOUDINI_USER_PREF_DIR") + "/scene_presets"
+if not os.path.exists(folder_path):
+    os.mkdir(folder_path)
+
+
+class Window_Scene_presets(QtWidgets.QWidget):
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Scene Presets")
+        self.build_layout()
+
+    def build_layout(self):
+        # Vertical layout.
+        lyt = QtWidgets.QVBoxLayout()
+        self.setLayout(lyt)
+        self.setFixedSize(400, 340)
+        self.setStyleSheet("font-size: 14px;")
+
+        # List with presets.
+        self.list_presets = QtWidgets.QListWidget()
+        self.list_presets.setMinimumHeight(240)
+        self.list_presets.setMaximumHeight(240)
+
+        self.list_presets.itemClicked.connect(self.preset_clicked)
+        lyt.addWidget(self.list_presets)
+
+        # Place to set preset name.
+        self.preset_name = QtWidgets.QLineEdit()
+        self.preset_name.textChanged.connect(self.name_changed)
+        lyt.addWidget(self.preset_name)
+
+        # Button to save a new preset or update an existing.
+        self.save_button = QtWidgets.QPushButton("Save New preset")
+        self.save_button.clicked.connect(self.save_preset)
+        self.save_button.setEnabled(False)
+        lyt.addWidget(self.save_button)
+
+        # Button to load preset.
+        self.load_button = QtWidgets.QPushButton("Load preset")
+        self.load_button.clicked.connect(self.load_preset)
+        self.load_button.setEnabled(False)
+        lyt.addWidget(self.load_button)
+
+        # Import saved presets.
+        cmd_files = self.get_presets()
+        self.add_to_list(cmd_files)
+
+    def get_presets(self):
+        """Gets a list of all previously saved presets."""
+
+        cmd_files = []
+        files = os.listdir(folder_path)
+
+        for file in files:
+            if file.endswith('.cmd'):
+                name = os.path.splitext(file)[0]
+                cmd_files.append(name)
+
+        return cmd_files
+
+    def add_to_list(self, cmd_files):
+        """Adds all files to the list of presets."""
+
+        for file in cmd_files:
+            self.list_presets.addItem(file)
+
+    def name_changed(self, text):
+        """Check if there is a preset with the same name."""
+
+        # If there is no text, return.
+        if text == "":
+            self.load_button.setEnabled(False)
+            self.save_button.setEnabled(False)
+            return
+
+        # Check if this name is already used.
+        total_items = self.list_presets.count()
+        for i in range(total_items):
+            item = self.list_presets.item(i)
+
+            if text == item.text():
+                self.save_button.setEnabled(True)
+                self.save_button.setText("Update preset")
+                self.load_button.setEnabled(True)
+                return
+
+        # Correct name removing special characters.
+        text = self.correct_text(text)
+        self.preset_name.setText(text)
+
+        self.save_button.setEnabled(True)
+        self.save_button.setText("Save New preset")
+        self.load_button.setEnabled(False)
+
+    def correct_text(self, text):
+        """ Convert file name to valid name."""
+
+        special_characters = [" ",".", "*", "!", "\\", ",", "/", 
+                        "#", "(", ")", "$", "Â¡", "{", "}"]
+
+        for c in special_characters:
+            text = text.replace(c, "_")
+
+        return text
+
+    def preset_clicked(self, item):
+        """Select that preset."""
+        self.preset_name.setText(item.text())
+
+    def save_preset(self):
+        """Save preset."""
+
+        name = self.preset_name.text()
+
+        export_path = os.path.join(folder_path, f"{name}.cmd")
+
+        # If this preset already exists, ask for confirmation.
+        if os.path.exists(export_path):
+            confirm_check = hou.ui.displayMessage(
+                "Are you sure? This will remove the"
+                "previous version of this preset.",
+                buttons=("Confirm", "Cancel"),
+                default_choice=0,
+                close_choice=1)
+
+            if not confirm_check == 0:
+                # Reactivate principal window.
+                self.activateWindow()
+                return
+
+        export_cmd = f'opscript -G -r / > "{export_path}"'
+        hou.hscript(export_cmd)
+        self.close()
+        hou.ui.displayMessage("Saved.")
+
+    def load_preset(self):
+        """Create all nodes."""
+
+        # Delete all existing nodes.
+        for n in hou.node("/").children():
+            for n_child in n.children():
+                n_child.destroy()
+
+        # Create nodes from selected preset.
+        name = self.preset_name.text()
+
+        hou.ui.setStatusMessage("Loading...")
+        preset_path = os.path.join(folder_path, f"{name}.cmd")
+        load_cmd = f'cmdread "{preset_path}"'
+        hou.hscript(load_cmd)
+
+        self.close()
+        hou.ui.setStatusMessage("Ready.")
+
+
+ui = Window_Scene_presets()
+ui.show()
+
+
+
+]]></script>
+  </tool>
 </shelfDocument>
