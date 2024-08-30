@@ -134,7 +134,7 @@ class Window_Scene_presets(QtWidgets.QWidget):
         # If this preset already exists, ask for confirmation.
         if os.path.exists(export_path):
             confirm_check = hou.ui.displayMessage(
-                "Are you sure? This will remove the"
+                "Are you sure? This will remove the "
                 "previous version of this preset.",
                 buttons=("Confirm", "Cancel"),
                 default_choice=0,
